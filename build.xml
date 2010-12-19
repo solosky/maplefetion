@@ -2,7 +2,6 @@
 <project name="MapleFetion" default="compile" basedir="." xmlns:artifact="antlib:org.apache.maven.artifact.ant">
 
     <property name="src.dir"   value="src"   />
-    <property name="demo.dir"   value="demo"   />
     <property name="build.dir" value="build" />
     <property name="dist.dir"  value="dist"  />
     <property name="lib.dir"   value="lib"   />
@@ -26,20 +25,13 @@
    <!--  编译文件 -->
     <target name="compile" depends="init">
         <javac srcdir="${src.dir}" destdir="${build.dir}"  classpathref="compile.classpath" encoding="UTF-8"/>
-        <mkdir dir="${build.dir}/resources" />
-    	<copydir src="${src.dir}/resources" dest="${build.dir}/resources" />
+        <copy file="${src.dir}/maplefetionDefault.properties" todir="${build.dir}" />
     </target>
 
     <!-- 构建JAR -->
     <target name="dist" depends="compile">
         <mkdir dir="${dist.dir}"/>
-        <jar jarfile="${dist.dir}/maplefetion-core-${DSTAMP}.jar" basedir="${build.dir}"/>
-    </target>
-
-     <!-- 构建Demo -->
-    <target name="demo" depends="compile">
-        <mkdir dir="${demo.dir}"/>
-        <jar jarfile="${dist.dir}/maplefetion-demo-${DSTAMP}.jar" basedir="${build.dir}"/>
+        <jar jarfile="${dist.dir}/MapleFetion-${DSTAMP}.jar" basedir="${build.dir}"/>
     </target>
     
     <!-- 清除目录 -->

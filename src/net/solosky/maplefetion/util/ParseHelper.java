@@ -25,8 +25,13 @@
  */
 package net.solosky.maplefetion.util;
 
-import net.solosky.maplefetion.bean.Relation;
+import java.text.DateFormat;
+import java.text.ParseException;
 
+import org.jdom.Element;
+
+import net.solosky.maplefetion.bean.BuddyExtend;
+import net.solosky.maplefetion.bean.FetionBuddy;
 
 /**
  *
@@ -36,51 +41,62 @@ import net.solosky.maplefetion.bean.Relation;
  */
 public class ParseHelper
 {
-	
-	public static String parseString(String s)
+	/**
+	 * 解析基本的好友信息
+	 * @param buddy
+	 * @param personal
+	 */
+	public static void parseBuddyPersonalBasic(FetionBuddy buddy, Element personal)
 	{
-		return s;
-	}
-	public static Long parseLong(String s)
-	{
-		try {
-	        return Long.parseLong(s);
-        } catch (NumberFormatException e) {
-        	return new Long(0);
-        }
-	}
-	
-	public static String toString(String s)
-	{
-		return s;
-	}
-	
-	public static String toLong(Long l)
-	{
-		return Long.toString(l);
-	}
-	
-	public static Integer parseInteger(String s)
-	{
-		try {
-	        return Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-	        return new Integer(0);
-        }
-	}
-	
-	public static String toInteger(Integer i)
-	{
-		return Integer.toString(i);
-	}
+		if(buddy==null || personal==null)	return;
 
-	public static Relation parseRelation(String r) throws ParseException 
-	{
-		return Relation.valueOf(Integer.parseInt(r));
+		//这下面就是读取好友信息的详细字段，这里只实现了一部分，其余的下个版本添加。。
+		String userId = personal.getAttributeValue("user-id");
+		if(userId!=null && userId.length()>0)
+			buddy.setUid(Integer.parseInt(userId));										//用户编号，这个不是飞信号
+		buddy.setGender(personal.getAttributeValue("gender"));							//好友性别
+		buddy.setImpresa(personal.getAttributeValue("impresa"));						//好友签名
+		buddy.setNickName(personal.getAttributeValue("nickname"));						//好友昵称
+		buddy.setPortrait(personal.getAttributeValue("portrait-crc"));					//头像
+		String mobileNo = personal.getAttributeValue("mobile-no");
+		if(mobileNo!=null && mobileNo.length()>0)
+			buddy.setMobileNo(Long.parseLong(personal.getAttributeValue("mobile-no")));	//手机号码
+		
+		//TODO ..下个版本添加好友的其他属性
 	}
 	
-	public static String toRelation(Relation r)
+	
+	/**
+	 * 解析好友的详细信息
+	 * @param buddy
+	 * @param personal
+	 */
+	public static void parseBuddyPersonalExtend(FetionBuddy buddy, Element personal)
 	{
-		return r.toString();
+		if(buddy==null || personal==null)	return;
+
+		//检查好友详细信息是否有效
+		BuddyExtend extend = buddy.getExtend();
+		if(extend==null) {
+			extend = new BuddyExtend();
+			buddy.setExtend(extend);
+		}
+		
+		//逐个解析详细信息
+		try {
+	        extend.setBirth(DateFormat.getInstance().parse(personal.getAttributeValue("birth-date")));
+        } catch (Exception e) {
+        	extend.setBirth(null);
+        }
+		extend.setBlood( personal.getAttributeValue("blood-type"));
+		extend.setNation( personal.getAttributeValue("nation"));
+		extend.setProvince( personal.getAttributeValue("province"));
+		extend.setCity( personal.getAttributeValue("city"));
+		extend.setHobby( personal.getAttributeValue("hobby"));
+		extend.setHoroscope(personal.getAttributeValue("horoscope"));
+		extend.setLunarAnimal(personal.getAttributeValue("lunar-animal"));
+		extend.setOccupation(personal.getAttributeValue("occupation"));
+		extend.setEmail(personal.getAttributeValue("personal-email"));
 	}
+	
 }

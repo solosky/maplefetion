@@ -29,7 +29,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
 import java.util.StringTokenizer;
 
 /**
@@ -46,6 +45,8 @@ public class ConvertHelper
             '0', '1', '2', '3', '4', '5', '6', '7',
             '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
     };
+    // string buffer
+    private static StringBuilder sb = new StringBuilder();
 
 	/**
      * 把字节数组转换成16进制字符串
@@ -82,8 +83,7 @@ public class ConvertHelper
         if(end > b.length)
             end = b.length;
         
-        StringBuffer sb = new StringBuffer();
-        
+        sb.delete(0, sb.length());
         for(int i = offset; i < end; i++) {
             sb.append(hex[(b[i] & 0xF0) >>> 4])
             	.append(hex[b[i] & 0xF])
@@ -129,8 +129,7 @@ public class ConvertHelper
         if(end > b.length)
             end = b.length;
         
-        StringBuffer sb = new StringBuffer();
-        
+        sb.delete(0, sb.length());
         for(int i = offset; i < end; i++) {
             sb.append(hex[(b[i] & 0xF0) >>> 4])
             	.append(hex[b[i] & 0xF]);
@@ -208,7 +207,7 @@ public class ConvertHelper
     	try {
 	        ret = src.getBytes("UTF8");
         } catch (UnsupportedEncodingException e) {
-        	throw new RuntimeException(e);
+        	//nerver happened..
         }
         return ret;
     }
@@ -224,25 +223,9 @@ public class ConvertHelper
     	try {
 	        ret = new String(src, "UTF8");
         } catch (UnsupportedEncodingException e) {
-        	throw new RuntimeException(e);
+        	//nerver happened..
         }
         return ret;
     }
-    
-    /**
-     * 把整形数转换为字节数组
-     * @param i
-     * @return
-     */
-    public static byte[] int2Byte(int i)
-    {
-          byte [] b = new byte[4];
-          for(int m=0; m<4; m++, i>>=8) {
-        	  b[m] = (byte) (i & 0x000000FF);	//奇怪, 在C# 整型数是低字节在前  byte[] bytes = BitConverter.GetBytes(i);
-        	  									//而在JAVA里，是高字节在前
-          }
-          return b;
-    }
-    
 
 }

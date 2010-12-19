@@ -27,64 +27,31 @@ package net.solosky.maplefetion.store;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
 
-import net.solosky.maplefetion.bean.Buddy;
-import net.solosky.maplefetion.bean.Cord;
-import net.solosky.maplefetion.bean.Credential;
-import net.solosky.maplefetion.bean.Group;
-import net.solosky.maplefetion.bean.Member;
-import net.solosky.maplefetion.bean.Relation;
-import net.solosky.maplefetion.bean.ScheduleSMS;
-import net.solosky.maplefetion.bean.StoreVersion;
-import net.solosky.maplefetion.bean.User;
+import net.solosky.maplefetion.bean.FetionBuddy;
+import net.solosky.maplefetion.bean.FetionCord;
 
 /**
  * 
- * 简单的飞信存储的一个实现 
- * 所有的数据都是保存在内存中
+ * 保存飞信的数据
+ * 如好友，消息历史等
  *
  * @author solosky <solosky772@qq.com> 
  */
-public class SimpleFetionStore implements FetionStore
+public class SimpleFetionStore implements IFetionStore
 {
 	/**
 	 * 好友列表
 	 * 使用HASH便于查找
 	 */
-	private Hashtable<String, Buddy> buddyList;
+	private Hashtable<String, FetionBuddy> buddyList;
 	
 	/**
 	 * 分组列表
 	 */
-	private ArrayList<Cord> cordList;
-	
-	/**
-	 * 群列表
-	 */
-	private Hashtable<String, Group> groupList;
-	
-	/**
-	 * 群成员列表
-	 */
-	private HashMap<String, HashMap<String, Member>> groupMemberList;
-	
-	/**
-	 * 定时短信列表
-	 */
-	private ArrayList<ScheduleSMS> scheduleSMSList;
-	
-	/**
-	 * 凭证列表
-	 */
-	private HashMap<String, Credential> credentialList;
-	
-	/**
-	 * 存储版本
-	 */
-	private StoreVersion storeVersion;
+	private ArrayList<FetionCord> cordList;
 
 	
 	/**
@@ -92,61 +59,48 @@ public class SimpleFetionStore implements FetionStore
 	 */
 	public SimpleFetionStore()
 	{
-		this.buddyList = new Hashtable<String, Buddy>();
-		this.cordList  = new ArrayList<Cord>();
-		this.groupList = new Hashtable<String, Group>();
-		this.groupMemberList = new HashMap<String, HashMap<String,Member>>();
-		this.storeVersion = new StoreVersion();
-		this.scheduleSMSList = new ArrayList<ScheduleSMS>();
-		this.credentialList = new HashMap<String, Credential>();
+		this.buddyList = new Hashtable<String, FetionBuddy>();
+		this.cordList  = new ArrayList<FetionCord>();
 	}
 	
 	/* (non-Javadoc)
      * @see net.solosky.maplefetion.store.IFetionStore#addBuddy(net.solosky.maplefetion.bean.FetionBuddy)
      */
-	public synchronized void addBuddy(Buddy buddy)
+	public void addBuddy(FetionBuddy buddy)
 	{
 		this.buddyList.put(buddy.getUri(), buddy);
 	}
 	
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getBuddyByUri(java.lang.String)
+     * @see net.solosky.maplefetion.store.IFetionStore#isBuddy(java.lang.String)
      */
-    @Override
-    public synchronized Buddy getBuddyByUri(String uri)
-    {
-    	if(uri==null)	return null;
+	public boolean hasBuddy(String uri)
+	{
+		if(uri==null)	return false;
+		return this.buddyList.containsKey(uri);
+	}
+	
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.store.IFetionStore#getBuddy(java.lang.String)
+     */
+	public FetionBuddy getBuddy(String uri)
+	{
+		if(uri==null)	return null;
 		return this.buddyList.get(uri);
-    }
-
+	}
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getBuddyByUserId(int)
+     * @see net.solosky.maplefetion.store.IFetionStore#removeBuddy(java.lang.String)
      */
-    @Override
-    public synchronized Buddy getBuddyByUserId(int userId)
-    {
-    	Iterator<Buddy> it = this.buddyList.values().iterator();
-    	while(it.hasNext()) {
-    		Buddy buddy = it.next();
-    		if(buddy.getUserId()==userId)
-    			return buddy;
-    	}
-    	return null;
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#removeBuddyByUri(java.lang.String)
-     */
-    @Override
-    public synchronized void deleteBuddy(Buddy buddy)
-    {
-		this.buddyList.remove(buddy.getUri());
-    }
+	public void removeBuddy(String uri)
+	{
+		if(uri==null)	return;
+		this.buddyList.remove(uri);
+	}
 	
 	/* (non-Javadoc)
      * @see net.solosky.maplefetion.store.IFetionStore#getBuddyList()
      */
-	public synchronized Collection<Buddy> getBuddyList()
+	public Collection<FetionBuddy> getBuddyList()
 	{
 		return this.buddyList.values();
 	}
@@ -154,18 +108,22 @@ public class SimpleFetionStore implements FetionStore
 	/* (non-Javadoc)
      * @see net.solosky.maplefetion.store.IFetionStore#getBuddyList(java.lang.String)
      */
-	public synchronized Collection<Buddy> getBuddyListByCord(Cord cord)
+	public Collection<FetionBuddy> getBuddyList(int cordId)
 	{
-		ArrayList<Buddy> list = new ArrayList<Buddy>();
-		Iterator<Buddy> it = this.buddyList.values().iterator();
-		Buddy buddy = null;
-		String [] buddyCordIds = null;
+		ArrayList<FetionBuddy> list = new ArrayList<FetionBuddy>();
+		Iterator<FetionBuddy> it = this.buddyList.values().iterator();
+		FetionBuddy buddy = null;
+		String  buddyCordId = null;
 		while(it.hasNext()) {
 			buddy = it.next();
-			if(buddy.getCordId()!=null){
-				buddyCordIds = buddy.getCordId().split(";");
-				for(String cid : buddyCordIds){
-					if(cid.equals(Integer.toString(cord.getId()))){
+			buddyCordId = buddy.getCordId();
+			if(buddy.getRelationStatus()==FetionBuddy.RELATION_STATUS_AGREED) {
+				if(cordId==-1) {	//参数为负数，意思是获取没有分组的好友
+					if(buddyCordId==null || buddy.getCordId().length()==0) {
+						list.add(buddy);
+					}
+				}else {		//获取指定分组的好友
+					if(buddyCordId!=null && buddyCordId.indexOf(Integer.toString(cordId))!=-1) {
 						list.add(buddy);
 					}
 				}
@@ -175,328 +133,73 @@ public class SimpleFetionStore implements FetionStore
 	}
 	
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getBuddyListWithoutCord()
-     */
-    @Override
-    public synchronized Collection<Buddy> getBuddyListWithoutCord()
-    {
-    	ArrayList<Buddy> list = new ArrayList<Buddy>();
-		Iterator<Buddy> it = this.buddyList.values().iterator();
-		Buddy buddy = null;
-		String  buddyCordId = null;
-		while(it.hasNext()) {
-			buddy = it.next();
-			buddyCordId = buddy.getCordId();
-			if(buddyCordId==null || buddyCordId.length()==0) {
-				list.add(buddy);
-			}
-		}
-		return list;
-    }
-	
-	/* (non-Javadoc)
      * @see net.solosky.maplefetion.store.IFetionStore#addCord(net.solosky.maplefetion.bean.FetionCord)
      */
-	public synchronized void addCord(Cord cord)
+	public void addCord(FetionCord cord)
 	{
 		this.cordList.add(cord);
 	}
 	
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getCord(int)
-     */
-    @Override
-    public synchronized Cord getCord(int cordId)
-    {
-	   Iterator<Cord> it = this.cordList.iterator();
-	   while(it.hasNext()) {
-		   Cord cord = it.next();
-		   if(cord.getId()==cordId)
-			   return cord;
-	   }
-	   return null;
-    }
-    
-    public synchronized void deleteCord(Cord cord)
-    {
-    	this.cordList.remove(cord);
-    }
-	
-	/* (non-Javadoc)
      * @see net.solosky.maplefetion.store.IFetionStore#getCordList()
      */
-	public synchronized Collection<Cord> getCordList()
+	public Collection<FetionCord> getCordList()
 	{
 		return this.cordList;
 	}
 
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.store.IFetionStore#deleteBuddy(java.lang.String)
+     */
+    @Override
+    public void deleteBuddy(String uri)
+    {
+    	if(uri==null)	return;
+	    this.buddyList.remove(uri);  
+    }
+
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.store.IFetionStore#getDeclinedList()
+     */
+    @Override
+    public Collection<FetionBuddy> getDeclinedList()
+    {
+    	return this.getRelationBuddylist(FetionBuddy.RELATION_STATUS_DECLINED);
+    }
+
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.store.IFetionStore#getStrangerList()
+     */
+    @Override
+    public Collection<FetionBuddy> getStrangerList()
+    {
+    	return this.getRelationBuddylist(FetionBuddy.RELATION_STATUS_STRANGER);
+    }
+
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.store.IFetionStore#getUnconfirmedList()
+     */
+    @Override
+    public Collection<FetionBuddy> getUnconfirmedList()
+    {
+    	return this.getRelationBuddylist(FetionBuddy.RELATION_STATUS_UNCONFIRMED);
+    }
+    
     /**
      * 返回指定关系的列表
      * @param relation
      * @return
      */
-	@Override
-    public synchronized Collection<Buddy> getBuddyListByRelation(Relation relation)
+    private Collection<FetionBuddy> getRelationBuddylist(int relation)
     {
-    	ArrayList<Buddy> list = new ArrayList<Buddy>();
- 	   Iterator<Buddy> it = this.buddyList.values().iterator();
+    	ArrayList<FetionBuddy> list = new ArrayList<FetionBuddy>();
+ 	   Iterator<FetionBuddy> it = this.buddyList.values().iterator();
  	   while(it.hasNext()) {
- 		   Buddy buddy = it.next();
- 		   if(buddy.getRelation()==relation)
+ 		   FetionBuddy buddy = it.next();
+ 		   if(buddy.getRelationStatus()==relation)
  			   list.add(buddy);
  	   }
  	   return list;
     }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#flush()
-     */
-    @Override
-    public synchronized void flush()
-    {
-	    // TODO Auto-generated method stub
-	    
-    }
-
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#init(net.solosky.maplefetion.bean.FetionUser)
-     */
-    @Override
-    public synchronized void init(User user)
-    {
-	    // TODO Auto-generated method stub
-	    
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getStoreVersion()
-     */
-    @Override
-    public synchronized StoreVersion getStoreVersion()
-    {
-    	return this.storeVersion;
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#addGroup(net.solosky.maplefetion.bean.FetionGroup)
-     */
-    @Override
-    public synchronized void addGroup(Group group)
-    {
-    	this.groupList.put(group.getUri(), group);
-    	this.groupMemberList.put(group.getUri(), new HashMap<String,Member>());
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getGroup(java.lang.String)
-     */
-    @Override
-    public synchronized Group getGroup(String uri)
-    {
-	    return this.groupList.get(uri);
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getGroupList()
-     */
-    @Override
-    public synchronized Collection<Group> getGroupList()
-    {
-	    return this.groupList.values();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#removeGroup(java.lang.String)
-     */
-    @Override
-    public synchronized void deleteGroup(Group group)
-    {
-	    this.groupList.remove(group.getUri());
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#clear()
-     */
-    @Override
-    public synchronized void clear()
-    {
-    	this.buddyList.clear();
-    	this.cordList.clear();
-    	this.groupList.clear();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#clearBuddyList()
-     */
-    @Override
-    public synchronized void clearBuddyList()
-    {
-	    this.buddyList.clear();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#clearCordList()
-     */
-    @Override
-    public synchronized void clearCordList()
-    {
-    	this.cordList.clear();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#clearGroupList()
-     */
-    @Override
-    public synchronized void clearGroupList()
-    {
-    	this.groupList.clear();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#addGroupMember(net.solosky.maplefetion.bean.Group, net.solosky.maplefetion.bean.Member)
-     */
-    @Override
-    public synchronized void addGroupMember(Group group, Member member)
-    {
-    	HashMap<String,Member> table = this.groupMemberList.get(group.getUri());
-    	if(table!=null) {
-    		table.put(member.getUri(), member);
-    	}
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getGroupMemberList(net.solosky.maplefetion.bean.Group)
-     */
-    @Override
-    public synchronized Collection<Member> getGroupMemberList(Group group)
-    {
-    	return this.groupMemberList.get(group.getUri()).values();
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#removeGroupMember(net.solosky.maplefetion.bean.Group, net.solosky.maplefetion.bean.Member)
-     */
-    @Override
-    public void deleteGroupMember(Group group, Member member)
-    {
-    	HashMap<String,Member> table = this.groupMemberList.get(group.getUri());
-    	if(table!=null) {
-    		table.remove(member.getUri());
-    	}
-	    
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getGroupMember(net.solosky.maplefetion.bean.Group, java.lang.String)
-     */
-    @Override
-    public synchronized Member getGroupMember(Group group, String uri)
-    {
-    	HashMap<String,Member> table = this.groupMemberList.get(group.getUri());
-    	if(table!=null) {
-    		return table.get(uri);
-    	}
-    	return null;
-    }
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.store.FetionStore#addScheduleSMS(net.solosky.maplefetion.bean.ScheduleSMS)
-	 */
-	@Override
-	public synchronized void addScheduleSMS(ScheduleSMS scheduleSMS)
-	{
-		this.scheduleSMSList.add(scheduleSMS);
-	}
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.store.FetionStore#deleteScheduleSMS(net.solosky.maplefetion.bean.ScheduleSMS)
-	 */
-	@Override
-	public synchronized void deleteScheduleSMS(ScheduleSMS scheduleSMS)
-	{
-		this.scheduleSMSList.remove(scheduleSMS);
-	}
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.store.FetionStore#getScheduleSMSList()
-	 */
-	@Override
-	public synchronized Collection<ScheduleSMS> getScheduleSMSList()
-	{
-		return this.scheduleSMSList;
-	}
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.store.FetionStore#getScheduleSMS(int)
-	 */
-	@Override
-	public synchronized ScheduleSMS getScheduleSMS(int scId)
-	{
-		Iterator<ScheduleSMS> it = this.scheduleSMSList.iterator();
-		while(it.hasNext()){
-			ScheduleSMS sc = it.next();
-			if(sc.getId()==scId){
-				return sc;
-			}
-		}
-		return null;
-	}
-
-	@Override
-	public void flushBuddy(Buddy buddy) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void flushCord(Cord cord) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void flushGroup(Group group) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void flushMemeber(Group group, Member member) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void flushStoreVersion(StoreVersion version) {
-		// TODO Auto-generated method stub
-		
-	}
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#addCredential(net.solosky.maplefetion.bean.Credential)
-     */
-    @Override
-    public void addCredential(Credential credential)
-    {
-    	this.credentialList.put(credential.getDomain(), credential);
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getCredential(java.lang.String)
-     */
-    @Override
-    public Credential getCredential(String domain)
-    {
-	   return this.credentialList.get(domain);
-    }
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.store.FetionStore#getCredentialList()
-     */
-    @Override
-    public Collection<Credential> getCredentialList()
-    {
-	   return this.credentialList.values();
-    }
+	
 }

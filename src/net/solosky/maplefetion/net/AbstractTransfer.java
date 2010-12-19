@@ -16,124 +16,90 @@
  */
 
  /**
- * Project  : MapleFetion2
- * Package  : net.solosky.net.maplefetion.net
+ * Project  : MapleFetion
+ * Package  : net.solosky.maplefetion.net
  * File     : AbstractTransfer.java
  * Author   : solosky < solosky772@qq.com >
- * Created  : 2010-1-6
+ * Created  : 2009-12-21
  * License  : Apache License 2.0 
  */
 package net.solosky.maplefetion.net;
 
-import java.util.Arrays;
+import java.io.IOException;
 
-import net.solosky.maplefetion.FetionException;
-import net.solosky.maplefetion.chain.AbstractProcessor;
-import net.solosky.maplefetion.client.SystemException;
-import net.solosky.maplefetion.net.buffer.ByteArrayReader;
-import net.solosky.maplefetion.net.buffer.ByteWriter;
+import net.solosky.maplefetion.sip.SIPNotify;
+import net.solosky.maplefetion.sip.SIPResponse;
 
 /**
  *
- * 抽象的传输类
+ * 抽象的传输对象
+ * 实现了传输对象的基本功能，其他传输对象可以继承自抽象传输对象
  *
  * @author solosky <solosky772@qq.com>
  */
-public abstract class AbstractTransfer extends AbstractProcessor implements Transfer
-{
+public abstract class AbstractTransfer implements ITransfer
+{	
+	/**
+	 * 监听器
+	 */
+	protected ISIPMessageListener listener;
+	
+	
+	public AbstractTransfer()
+	{
+	}
+	
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.chain.AbstractProcessor#startProcessor()
+     * @see net.solosky.maplefetion.net.ITransfer#getSIPMessageListener()
      */
     @Override
-    public void startProcessor() throws FetionException
+    public ISIPMessageListener getSIPMessageListener()
     {
-	    this.startTransfer();
+	    return this.listener;
     }
-
+    
 	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.chain.AbstractProcessor#stopProcessor()
+     * @see net.solosky.maplefetion.net.ITransfer#setSIPMessageListener(net.solosky.maplefetion.net.ISIPMessageListener)
      */
     @Override
-    public void stopProcessor() throws FetionException
+    public void setSIPMessageListener(ISIPMessageListener listener)
     {
-    	this.stopTransfer();
+    	this.listener = listener;
     }
+    
 
-
-	/* (non-Javadoc)
-     * @see net.solosky.net.maplefetion.chain.Processor#getProcessorName()
+    
+    /**
+     * 收到了回复
+     * 这个方法供子类调用
+     * @param response
+     * @throws IOException
      */
-    @Override
-    public String getProcessorName()
+    protected void responseReceived(SIPResponse response) throws IOException
     {
-    	return Transfer.class.getName();
+    	this.listener.SIPResponseReceived(response, null);
     }
     
     /**
-     * 传输对象已经读取字节后回调方法
-     * 直接把这个对象交个下一个处理器，一般是parser
-     * @param reader
+     * 收到了通知
+     * 这个方法供子类调用
+     * @param notify
+     * @throws IOException
      */
-    protected void bytesRecived(byte[] buff, int offset, int len)
+    protected void notifyReceived(SIPNotify notify) throws IOException
     {
-    	try {
-	        this.processIncoming(new ByteArrayReader(buff, len));
-        } catch (FetionException e) {
-	       	this.raiseException(e);
-        }catch(Throwable t) {
-        	this.raiseException(new SystemException(t, new String(Arrays.copyOfRange(buff, offset, offset+len))));
-        }
+    	this.listener.SIPNotifyReceived(notify);
     }
     
     /**
-     * 发送数据包
-     * @param buff
-     * @param offset
-     * @param len
-     * @throws TransferException
+     * 发生了异常
+     * 这个方法供子类调用
+     * @param exception
      */
-    protected abstract void sendBytes(byte[] buff, int offset, int len) throws TransferException;
-    
-    /**
-     * 发送消息，直接交给子类发送
-     */
-    @Override
-    public void processOutcoming(Object o) throws FetionException
+    protected void exceptionCaught(Throwable exception)
     {
-    	if(o instanceof ByteWriter) {
-    		ByteWriter writer = (ByteWriter) o;
-    		try {
-	           this.sendBytes(writer.toByteArray(), 0, writer.size());
-            } catch (TransferException e) {
-            	this.raiseException(e);
-            }
-    	}
+    	this.listener.ExceptionCaught(exception);
     }
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.Transfer#startTransfer()
-	 */
-	@Override
-	public void startTransfer() throws TransferException
-	{
-	}
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.Transfer#stopTransfer()
-	 */
-	@Override
-	public void stopTransfer() throws TransferException
-	{
-	}
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.Transfer#getTransferName()
-	 */
-	@Override
-	public String getTransferName()
-	{
-		return this.toString();
-	}
-    
-    
+ 
+	
 }

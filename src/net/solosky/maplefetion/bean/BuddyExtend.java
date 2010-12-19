@@ -29,8 +29,7 @@ import java.util.Date;
 
 /**
  *	
- *	好友的详细资料 
- *  这个类主要是减少内存使用，因为客户端运行时并不是把好友的详细信息全部下载下来
+ *	好友的详细资料
  *
  * @author solosky <solosky772@qq.com> 
  */
@@ -41,6 +40,7 @@ public class BuddyExtend
 	private String city;
 	private Date birth;
 	private String blood;
+	private String email;
 	private String occupation;
 	private String hobby;
 	private String lunarAnimal;
@@ -115,6 +115,20 @@ public class BuddyExtend
     public void setBlood(String blood)
     {
     	this.blood = blood;
+    }
+	/**
+     * @return the email
+     */
+    public String getEmail()
+    {
+    	return email;
+    }
+	/**
+     * @param email the email to set
+     */
+    public void setEmail(String email)
+    {
+    	this.email = email;
     }
 	/**
      * @return the occupation

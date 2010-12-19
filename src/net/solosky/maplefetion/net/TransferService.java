@@ -1,4 +1,4 @@
-/*
+ /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,372 +15,280 @@
  * limitations under the License.
  */
 
-/**
- * Project  : MapleFetion2
- * Package  : net.solosky.net.maplefetion.net
- * File     : TransferService.java
+ /**
+ * Project  : MapleFetion
+ * Package  : net.solosky.maplefetion.net
+ * File     : TransferSerivce.java
  * Author   : solosky < solosky772@qq.com >
- * Created  : 2010-1-6
+ * Created  : 2010-1-4
  * License  : Apache License 2.0 
  */
 package net.solosky.maplefetion.net;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.TimerTask;
 
 import net.solosky.maplefetion.FetionConfig;
-import net.solosky.maplefetion.FetionContext;
-import net.solosky.maplefetion.FetionException;
-import net.solosky.maplefetion.chain.AbstractProcessor;
-import net.solosky.maplefetion.client.ResponseHandler;
-import net.solosky.maplefetion.client.SystemException;
-import net.solosky.maplefetion.sipc.SipcHeader;
-import net.solosky.maplefetion.sipc.SipcNotify;
-import net.solosky.maplefetion.sipc.SipcRequest;
-import net.solosky.maplefetion.sipc.SipcResponse;
-import net.solosky.maplefetion.sipc.SipcStatus;
-import net.solosky.maplefetion.util.SliceSipcResponseHelper;
-import net.solosky.maplefetion.util.TimeHelper;
+import net.solosky.maplefetion.sip.SIPHeader;
+import net.solosky.maplefetion.sip.SIPInMessage;
+import net.solosky.maplefetion.sip.SIPNotify;
+import net.solosky.maplefetion.sip.SIPOutMessage;
+import net.solosky.maplefetion.sip.SIPRequest;
+import net.solosky.maplefetion.sip.SIPResponse;
+import net.solosky.maplefetion.util.SIPMessageLogger;
 
 import org.apache.log4j.Logger;
 
 /**
- * 
- * 传输服务 提供发出包和接收包的管理，并处理超时异常
- * 
+ *
+ * 传输服务
+ * 提供发出包和接收包的管理，日志记录，并处理超时异常
+ *
  * @author solosky <solosky772@qq.com>
  */
-public class TransferService extends AbstractProcessor
+public class TransferService implements ISIPMessageListener
 {
-
 	/**
-	 * 已发送请求队列
+	 * 传输对象
 	 */
-	private Queue<SipcRequest> requestQueue;
+	private ITransfer transfer;
 	
 	/**
-	 * 分块传输的消息队列
+	 * 监听器
 	 */
-	private Queue<SliceSipcResponseHelper> slicedResponseQueue;
+	protected ISIPMessageListener listener;
 	
 	/**
-	 * 飞信上下文
+	 * 已发送队列
 	 */
-	private FetionContext context;
+	private Queue<SIPOutMessage> sendQueue;
 	
 	/**
-	 * 主要用操作定时任务
+	 * 信令记录器
 	 */
-	private TimerTask sipcTimeoutCheckTask;
+	protected SIPMessageLogger messageLogger;
+	
+	/**
+	 * 定时检查超时任务，
+	 */
+	private TimerTask timeOutCheckTask;
 	
 	/**
 	 * 日志记录
 	 */
 	private static Logger logger = Logger.getLogger(TransferService.class);
-
+	
+	
 	/**
 	 * 默认构造函数
 	 */
-	public TransferService(FetionContext context)
+	public TransferService(ITransfer transfer, ISIPMessageListener listener)
 	{
-		this.context = context;
-		this.requestQueue = new LinkedList<SipcRequest>();
-		this.slicedResponseQueue = new LinkedList<SliceSipcResponseHelper>();
+		this.transfer = transfer;
+		this.listener = listener;
+		this.sendQueue =  new LinkedList<SIPOutMessage>();
+		this.messageLogger = SIPMessageLogger.create(transfer.getName());
+		this.timeOutCheckTask = new TimeOutCheckTask();
+		
+		this.transfer.setSIPMessageListener(this);
+		
 	}
-
+	
 	/**
-	 * 处理接受的包 在已发送队列中查找相对应的发出包，然后放入接受包中
+	 * 发送SIP信令
+	 * @param outMessage
+	 * @throws IOException
 	 */
-	@Override
-	protected Object doProcessIncoming(Object o) throws FetionException
-	{
-		//-_-!!! , 好吧，我承认这里判断逻辑有点乱。。
-		if (o instanceof SipcResponse) {
-			SipcResponse response = (SipcResponse) o;
-			//先检查这个回复是不是分块回复的一部分
-			SliceSipcResponseHelper helper = this.findSliceResponseHelper(response);
-			if(helper!=null){
-				//如果是分块回复，就添加到分块回复列表中
-				helper.addSliceSipcResponse(response);
-				if(helper.isFullSipcResponseRecived()){
-					synchronized (slicedResponseQueue) {
-						slicedResponseQueue.remove(helper);
-					}
-					
-					//构造新的回复
-					SipcResponse some = helper.getFullSipcResponse();
-					this.handleFullResponse(some);
-					
-					return some;	//返回新的完整的请求
-				}else{
-					return null;	//分块回复还没接收完，返回null停止处理链
-				}
-			}else if(response.getStatusCode()==SipcStatus.PARTIAL){	//可能是第一次收到的分块回复
-				helper = new SliceSipcResponseHelper(response);
-				synchronized (slicedResponseQueue) {
-					slicedResponseQueue.add(helper);
-				}
-				return null;		//第一个分块回复，返回null停止处理链
-			}else{	//不是分块回复的对象就直接进行下一步操作
-				this.handleFullResponse(response);
-				return response;
-			}
-		}else if(o instanceof SipcNotify){
-			this.handleFullNotify((SipcNotify) o);
-			return (SipcNotify) o;	
-		}else{
-			return null;	//未知类型，一般不会发生。。
-		}
-	}
-
-	/**
-	 * 处理发送的包 如果这个包需要回复，就把这个包加入到已发送的队列中，然后隔一段时间后检查是否超时
-	 */
-	@Override
-	protected Object doProcessOutcoming(Object o) throws FetionException
-	{
-		if (o instanceof SipcRequest) {
-			SipcRequest request = (SipcRequest) o;
-			//判断需要回复次数大于0才放人队列中
-			if(request.getNeedReplyTimes()>0) {
-				synchronized(this.requestQueue) {
-					this.requestQueue.add(request);
-				}
-			}
-		}
-		return super.doProcessOutcoming(o);
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see net.solosky.net.maplefetion.chain.Processor#getProcessorName()
-	 */
-	@Override
-	public String getProcessorName()
-	{
-		return TransferService.class.getName();
-	}
-
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.chain.AbstractProcessor#stopProcessor()
-     */
-    @Override
-    public void stopProcessor(FetionException ex) throws FetionException
+	public void sendSIPMessage(SIPOutMessage outMessage) throws IOException
     {
-    	//停止超时检查定时任务
-    	this.sipcTimeoutCheckTask.cancel();
-    	this.context.getFetionTimer().clearCanceledTask();
-    	//通知当前发送队列中的请求都超时
-    	synchronized (requestQueue) {
-    		Iterator<SipcRequest> it = this.requestQueue.iterator();
-        	while(it.hasNext()) {
-        		SipcRequest request = it.next();
-        		ResponseHandler handler = request.getResponseHandler();
-        		if(handler!=null) {
-        			if(ex==null){
-        				handler.timeout(request);
-        			}else if(ex instanceof TransferException){
-        				handler.ioerror(request);
-        			}else if(ex instanceof SystemException){
-        				handler.syserror(request, ex.getCause());
-        			}else{
-        				handler.timeout(request);
-        			}
-        		}
-        	}
+    	//交给传输对象发送这个消息
+    	this.transfer.sendSIPMessage(outMessage);
+    	//如果需要回复才放入发送队列
+    	if(outMessage.isNeedAck()) {
+    		this.sendQueue.add(outMessage);
     	}
+    	messageLogger.logSIPMessage(outMessage);
     }
-    
-    
-	/* (non-Javadoc)
-     * @see net.solosky.maplefetion.chain.AbstractProcessor#startProcessor()
-     */
-    @Override
-    public void startProcessor() throws FetionException
-    {
-    	this.sipcTimeoutCheckTask = new SipMessageTimeOutCheckTask();
-    	int checkTimeoutInterval  = FetionConfig.getInteger("fetion.sip.check-alive-interval")*1000;
-    	int checkTimeoutDelay     = 50*100;
-	    this.context.getFetionTimer().scheduleTask(
-	    						this.sipcTimeoutCheckTask, checkTimeoutDelay, checkTimeoutInterval);
-    }
-    
-
-	/**
-	 * 
-	 * 内部类，实现了超时检查任务 简单的委托给队列管理器处理
-	 * 
-	 * @author solosky <solosky772@qq.com>
-	 */
-	public class SipMessageTimeOutCheckTask extends TimerTask
-	{
-		@Override
-		public void run()
-		{
-			try {
-				checkTimeOutRequest();
-			} catch (FetionException e) {
-				raiseException(e);
-			}
-		}
-	}
-
+	
 	/**
 	 * 在已发送队列中查找对应发送信令
-	 * 
-	 * @param response
+	 * @param in
 	 * @return
 	 */
-	public SipcRequest findRequest(SipcResponse response)
+	public synchronized SIPOutMessage findSIPMessage(SIPInMessage in)
 	{
-		synchronized(this.requestQueue) {
-    		Iterator<SipcRequest> it = this.requestQueue.iterator();
-    		SipcRequest request = null;
-    		String resCallID = response.getHeader(SipcHeader.CALLID).getValue();
-    		String resSequence = response.getHeader(SipcHeader.SEQUENCE).getValue();
-    		String reqCallID = null;
-    		String reqSequence = null;
-    		while (it.hasNext()) {
-    			request = it.next();
-    			reqCallID = request.getHeader(SipcHeader.CALLID).getValue();
-    			reqSequence = request.getHeader(SipcHeader.SEQUENCE).getValue();
-    			//如果callID和sequence都相等的话就找到了指定的请求
-    			if (resCallID.equals(reqCallID) && resSequence.equals(reqSequence)) {
-    				return request;
-    			}
-    		}
-    		return null;
-		}
+		Iterator<SIPOutMessage> it = this.sendQueue.iterator();
+    	SIPOutMessage out = null;
+    	String inCallID = in.getHeader(SIPHeader.FIELD_CALLID).getValue();
+    	String inSequence = in.getHeader(SIPHeader.FIELD_SEQUENCE).getValue();
+    	String outCallID = null;
+    	String outSequence = null;
+    	while(it.hasNext()) {
+    		out = it.next();
+    		outCallID = out.getHeader(SIPHeader.FIELD_CALLID).getValue();
+    		outSequence = out.getHeader(SIPHeader.FIELD_SEQUENCE).getValue();
+    		if(inCallID.equals(outCallID) && inSequence.equals(outSequence) ){
+    			it.remove();
+				return out;
+			}
+    	}
+    	return null;
 	}
 	
 	/**
-	 * 查找这个回复是否是分块回复的一部分
-	 * @param response
-	 * @return
+	 * 检查超时的包，如果没有超过指定的重发次数，就重发
+	 * 如果只要有一个包超出了重发的次数，就抛出超时异常
+	 * @throws IOException 
 	 */
-	private SliceSipcResponseHelper findSliceResponseHelper(SipcResponse response)
-	{
-		synchronized(this.slicedResponseQueue) {
-			Iterator<SliceSipcResponseHelper> it = this.slicedResponseQueue.iterator();
-    		int resCallID = response.getCallID();
-    		String resSequence = response.getSequence();
-    		SliceSipcResponseHelper helper = null;
-    		
-    		while (it.hasNext()) {
-    			helper = it.next();
-    			if (helper.getCallid()==resCallID && helper.getSequence().equals(resSequence)) {
-    				return helper;
-    			}
-    		}
-    		return null;
-		}
-	}
-	
-
-	/**
-	 * 检查超时的包，如果没有超过指定的重发次数，就重发 如果只要有一个包超出了重发的次数，就抛出超时异常
-	 * 
-	 * @throws FetionException
-	 */
-	private void checkTimeOutRequest() throws FetionException
-	{
-		int curTime     = TimeHelper.nowTimeUnixStamp();
+	private synchronized void checkTimeOutMessage() throws IOException
+	{	
+		SIPOutMessage out = null;
+		int curtime = (int) System.currentTimeMillis()/1000;
 		int maxTryTimes = FetionConfig.getInteger("fetion.sip.default-retry-times");
-		int aliveTime   = FetionConfig.getInteger("fetion.sip.default-alive-time");
-
-		//这里需要同步了。。 
-		synchronized (this.requestQueue) {
-			
-			//感觉JAVA集合中的队列怪怪的，特别是命名，peek poll如果不看注释根本不知道是什么含义，接口不明确啊，能望文生义那种接口最好
-			//比如getFrist() getLast() addFirst() addLast() peekFirst() peekLast()...
-			//更无语的是，如果队列为空调用peek()居然会抛异常，因为这个原因不得不在遍历队列的时候判断下队列的大小..
-			//所以这里采用的是集合的遍历方式，更加简洁，代码也更加优美点..
-			
-			ArrayList<SipcRequest> timeoutList = new ArrayList<SipcRequest>();		//超时的包的列表
-			Iterator<SipcRequest> it = this.requestQueue.iterator();
-			
-			//首先把超时的包找出来
-			while(it.hasNext()){
-				SipcRequest request = it.next(); 
-				if(request.getAliveTime()<curTime){				//超过了存活期，
-					//因为这里如果判断超时并重发，这个包会重新添加到队列中，当前迭代的列表会增加元素，迭代器就会抛出更改异常
-					//所以这里重新建立了一个超时列表，并把超时的包放入列表中，在当前迭代结束后才处理超时包
-					it.remove();							//先从队列中移除
-					timeoutList.add(request);				//添加到重发包列表
-				}else{
-					//未超过存活期，啥也不干
+		int aliveTimes = FetionConfig.getInteger("fetion.sip.default-alive-time");
+		//如果队列为空就不需要查找了
+		if(this.sendQueue.size()==0)
+			return;
+		
+		//从队列的头部开始查找，如果查到一个包存活时间还没有超过当前时间，就不在查找，因为队列中包的时间是按时间先后顺序存放的
+		while(true) {
+			out = this.sendQueue.peek();
+			if(out.getAliveTime()>curtime) {
+				return;		//当前包还处于存活期内，退出查找
+			}else {
+				//当前这个包是超时的包
+				if(out.getRetryTimes()<maxTryTimes) {
+					//如果小于重发次数，就重发这个包
+					logger.debug("A OutMessage:"+out+" timeout, now resend it...");
+					this.sendQueue.poll();
+					out.incRetryTimes();
+					out.setAliveTime(((int)System.currentTimeMillis()/1000)+aliveTimes);
+					this.transfer.sendSIPMessage(out);
+				}else {		//这个包已经超过重发次数，通知对话对象，发生了超时异常
+					logger.warn("A OutMessage is resend three times, handle this timeout exception...");
+					this.handlePacketTimeout(out);
 				}
-			}
-			
-			//遍历超时包列表，并根据条件判断是否重发或者通知超时
-			it = timeoutList.iterator();
-			while(it.hasNext()){
-				SipcRequest request = it.next();
-				if(request.getRetryTimes()<maxTryTimes){		//重发次数未超过指定的次数，重新发送这个包
-					logger.debug("Request was timeout, now sending it again... Request="+request);
-					request.incRetryTimes();					//递增重试次数
-					request.setAliveTime(curTime+aliveTime);	//更新存活时间
-					this.processOutcoming(request);				// 重新发送这个包
-				}else{											//这个包已经超过重发次数，通知超时
-					logger.warn("A request was sent three times, handle this timeout exception...Request="+request);
-					this.handleRequestTimeout(request);
-				}
-			
 			}
 		}
 	}
-
+	
+	
 	/**
 	 * 处理包超时异常
-	 * 
 	 * @param timeoutMessage
-	 * @throws FetionException 
 	 */
-	private void handleRequestTimeout(SipcRequest request) throws FetionException
+	private void handlePacketTimeout(SIPOutMessage timeoutMessage)
 	{
-		//发出包设置了超时处理器，就调用超时处理器，否则抛出超时异常，结束整个程序
-		if (request.getResponseHandler() != null) {
-			request.getResponseHandler().timeout(request);
+		//如果发出包设置了超时处理器，就调用超时处理器，否则抛出超时异常，结束整个程序
+		if(timeoutMessage.getTimeoutHandler()!=null) {
+			timeoutMessage.getTimeoutHandler().handleTimeout(timeoutMessage);
 		}else {
-			logger.warn("Request already was timeout, but there wasn't a timeout handler, ignore it. Request="+request);
+			this.handleTimeOutException(timeoutMessage);
 		}
 	}
 	
 	/**
-	 * 处理收到的完整回复，主要完成查找对应的请求包并注入到回复中
-	 * @param response
+	 * 超时退出程序
 	 */
-	private boolean handleFullResponse(SipcResponse response)
+	private synchronized void handleTimeOutException(SIPOutMessage timeoutMessage)
 	{
-		// 如果是回复的话，查找对应的请求，并通知回复等待对象
-		SipcRequest request = this.findRequest(response);
-		response.setRequest(request);
-		
-		//找到了对应的请求，然后判断是否回复已经到了指定的回复次数，如果到了就从队列中移除，如果没有，就不移除
-		if(request!=null) {
-			request.incReplyTimes();
-			if(request.getNeedReplyTimes()==request.getReplyTimes()) {
-				synchronized(this.requestQueue) {
-					this.requestQueue.remove(request);
-				}
-			}
-		}
-		
-		return true;
-	}
-	
-	/**
-	 * 处理收到完整通知
-	 * @param notify
-	 */
-	private boolean handleFullNotify(SipcNotify notify)
-	{
-		//目前什么也不做
-		return true;
+		//遍历所有发出队列里面的包，如果有是请求包并在等待回复，则通知回复
+		Iterator<SIPOutMessage> it = this.sendQueue.iterator();
+    	SIPOutMessage out = null;
+    	while(it.hasNext()) {
+    		out = it.next();
+    		if(out.isNeedAck()) {
+    			//判断是否是请求包，如果是强制转换，因为只有请求包才会需要等待回复
+    			if(out instanceof SIPRequest) {
+    				SIPRequest req = (SIPRequest) out;
+    				req.getResponseWaiter().setResponseTimeout();		//设置该请求超时
+    			}
+    		}
+    	}
+    	//通知对话对象，发生了超时异常
+    	this.listener.ExceptionCaught(new MessageTimeoutException(timeoutMessage));
 	}
 
+	
+	/**
+	 * 返回超时检查工作
+	 * @return
+	 */
+	public TimerTask getTimeOutCheckTask()
+	{
+		return this.timeOutCheckTask;
+	}
+	
+	/**
+	 * 启动服务
+	 * @throws Exception
+	 */
+	public void startService() throws Exception
+	{
+		this.transfer.startTransfer();
+	}
+	
+	/**
+	 * 停止服务
+	 * @throws Exception
+	 */
+	public void stopService() throws Exception
+	{
+		this.transfer.stopTransfer();
+	}
+	
+	
+	
+	/**
+	 * 
+	 *	内部类，实现了超时检查任务
+	 *  简单的委托给队列管理器处理
+	 *
+	 * @author solosky <solosky772@qq.com>
+	 */
+	public class TimeOutCheckTask extends TimerTask
+	{
+        @Override
+        public void run()
+        {
+        	try {
+        		logger.debug("TimeOutCheckTask is checking sended queue..[QueueSize:"+sendQueue.size()+"]");
+	            checkTimeOutMessage();
+            } catch (Exception e) {
+            	logger.warn("Exception caught when run TimeOutCheckTask..");
+            	transfer.getSIPMessageListener().ExceptionCaught(e);
+            }
+        }
+		
+	}
+
+    @Override
+    public void ExceptionCaught(Throwable e)
+    {
+    	listener.ExceptionCaught(e);
+    }
+    @Override
+    public void SIPNotifyReceived(SIPNotify notify)
+    {
+	    listener.SIPNotifyReceived(notify);
+	    try {
+	        this.messageLogger.logSIPMessage(notify);
+        } catch (IOException e) {
+	       logger.warn("Cannot log sip notify:"+e);
+        }
+    }
+    @Override
+    public void SIPResponseReceived(SIPResponse response, SIPRequest request)
+    {
+    	request = (SIPRequest) this.findSIPMessage(response);
+    	this.listener.SIPResponseReceived(response, request);
+    	try {
+	        this.messageLogger.logSIPMessage(response);
+        } catch (IOException e) {
+	       logger.warn("Cannot log sip response:"+e);
+        }
+    }
 }

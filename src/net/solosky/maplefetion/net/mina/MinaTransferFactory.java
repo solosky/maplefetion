@@ -16,107 +16,107 @@
  */
 
  /**
- * Project  : MapleFetion2
+ * Project  : MapleFetion
  * Package  : net.solosky.maplefetion.net.mina
  * File     : MinaTransferFactory.java
  * Author   : solosky < solosky772@qq.com >
- * Created  : 2010-6-19
+ * Created  : 2009-12-19
  * License  : Apache License 2.0 
  */
 package net.solosky.maplefetion.net.mina;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.Executor;
 
-import net.solosky.maplefetion.net.MutiConnectionTransferFactory;
-import net.solosky.maplefetion.net.Port;
-import net.solosky.maplefetion.net.Transfer;
-import net.solosky.maplefetion.net.TransferException;
+import net.solosky.maplefetion.net.ITransfer;
+import net.solosky.maplefetion.net.ITransferFactory;
 
 import org.apache.mina.core.future.ConnectFuture;
-import org.apache.mina.transport.socket.nio.NioProcessor;
+import org.apache.mina.core.service.IoHandler;
+import org.apache.mina.filter.codec.ProtocolCodecFilter;
 import org.apache.mina.transport.socket.nio.NioSocketConnector;
 
 /**
  *
- * Mina传输工厂
- * 可以使用Mina在同时登陆多个客户端的时候提高效率
+ *	Mina异步库连接工厂
  *
  * @author solosky <solosky772@qq.com>
- *
  */
-public class MinaTransferFactory extends MutiConnectionTransferFactory
+public class MinaTransferFactory implements ITransferFactory
 {
+
 	/**
-	 * Connector
+	 * 连接器
+	 * Mina框架提供，负责建立连接和回调数据处理
 	 */
 	private NioSocketConnector connector;
 	
+	/**
+	 * 事件回调函数
+	 */
+	private IoHandler  ioHandler;
+	
 	
 	/**
-	 * 以一个执行器构造
-	 * @param executor		线程执行器
+	 * 默认的构造函数
 	 */
-	public MinaTransferFactory(Executor executor)
+	public MinaTransferFactory()
 	{
-		this.connector = new NioSocketConnector(new  NioProcessor(executor));
-		this.connector.setHandler(new MinaNioHandler());
+		connector = new NioSocketConnector();
+		ioHandler = new SIPIoHandler();
+		connector.getFilterChain()
+		.addFirst("SIPCodec",
+				new ProtocolCodecFilter(
+						new SIPProtocolCodecFactory()));
+		connector.setHandler(ioHandler);
 	}
 	
 	/**
-	 * 以一个NioSocketConnector构建
+	 * 以连接对象和消息处理器构造
 	 * @param connector
+	 * @param handler
 	 */
-	public MinaTransferFactory(NioSocketConnector connector)
+	public MinaTransferFactory(NioSocketConnector connector, IoHandler handler)
 	{
 		this.connector = connector;
-	}
-
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.MutiConnectionTransferFactory#getLocalPort(net.solosky.maplefetion.net.Transfer)
-	 */
-	@Override
-	protected Port getLocalPort(Transfer transfer)
-	{
-		MinaTransfer ts = (MinaTransfer) transfer;
-		InetSocketAddress addr = (InetSocketAddress) ts.getSession().getLocalAddress();
-		return new Port(addr.getAddress(), addr.getPort());
-	}
-
-
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.TransferFactory#createTransfer(net.solosky.maplefetion.net.Port)
-	 */
-	@Override
-	public Transfer createTransfer(Port port) throws TransferException
-	{
-		 ConnectFuture cf = connector.connect(new InetSocketAddress(port.getAddress(), port.getPort()));
-		 
-		 //等待连接结果
-    	 try {
-			cf.await();
-		} catch (InterruptedException e) {
-			throw new TransferException(e);
-		}
-		
-		//判断是否连接成功，如果不成功抛出异常
-		if(!cf.isConnected())
-			throw new TransferException("Connecting to "+port+" failed..");
-		
-		Transfer transfer = new MinaTransfer(cf.getSession());
-		cf.getSession().setAttribute(MinaTransfer.class, transfer);
-		
-    	 return transfer;
+		this.ioHandler = handler;
 	}
 	
-	/**
-	 * 真正的关闭连接池，释放资源
-	 * 因为Mina是为了在登陆多个客户端时提高效率的，所以一个客户端关闭时，并不关闭这个工厂
-	 * 需要用户手动的关闭这个工厂
-	 */
-	public void reallyCloseFactory()
-	{
-		this.connector.dispose();
-	}
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.net.ITransferFactory#createTransfer(java.lang.String, int)
+     */
+    @Override
+    public ITransfer createTransfer(String host, int port) throws Exception
+    {
+    	 ConnectFuture cf = connector.connect(new InetSocketAddress(host, port));
+    	 cf.await();
+    	 return new MinaTransfer(cf.getSession());
+    }
+    
+    /**
+     * 返回异步连接对象
+     * @return
+     */
+    public NioSocketConnector getNioSocketConnector()
+    {
+    	return this.connector;
+    }
+    
+    /**
+     * 返回事件处理接口
+     * @return
+     */
+    public IoHandler getIoHandler()
+    {
+    	return this.ioHandler;
+    }
+
+	/* (non-Javadoc)
+     * @see net.solosky.maplefetion.net.ITransferFactory#closeFactory()
+     */
+    @Override
+    public void closeFactory()
+    {
+	    this.connector.dispose();
+    }
+
 }

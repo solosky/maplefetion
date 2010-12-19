@@ -53,9 +53,8 @@ public class XMLHelper
 	/**
 	 * 从流中构建文档对象
 	 * @return 构造成功返回根元素
-	 * @throws ParseException 
 	 */
-	public static Element build(InputStream in) throws ParseException
+	public static Element build(InputStream in)
 	{
 		
 		try {
@@ -64,20 +63,18 @@ public class XMLHelper
 	        return doc.getRootElement();
         } catch (JDOMException e) {
         	logger.warn("Cannot parse XML Stream:"+e);
-        	throw new ParseException(e);
         } catch (IOException e) {
         	logger.warn("IOException occured when parsing XML Stream:"+e);
-        	throw new ParseException(e);
         }
+		return null;
 	}
 	
 	/**
 	 * 从字符串中创建文档对象
 	 * @param xml
 	 * @return
-	 * @throws ParseException 
 	 */
-	public static Element build(String xml) throws ParseException
+	public static Element build(String xml)
 	{
 		try {
 	        return build(new ByteArrayInputStream(xml.getBytes("utf8")));
@@ -97,14 +94,14 @@ public class XMLHelper
 	public static List findAll(Element tree, String path)
 	{
 		if(tree==null || path==null)	
-			return new ArrayList();	//防止产生Null异常
+			return null;
 		if(path.charAt(0)=='/')
 			path = path.substring( path.indexOf('/', 1)+1);
 		String[] paths = path.split("/");
 		for(int i=0; i<paths.length-1; i++) {
 			tree = tree.getChild(paths[i]);
 			if(tree==null)
-				return new ArrayList();	//防止产生Null异常
+				return new ArrayList();
 		}
 		List els = null;
 		String last = paths[paths.length-1];

@@ -16,110 +16,103 @@
  */
 
  /**
- * Project  : MapleFetion2
+ * Project  : MapleFetion
  * Package  : net.solosky.maplefetion.net.mina
  * File     : MinaTransfer.java
  * Author   : solosky < solosky772@qq.com >
- * Created  : 2010-6-19
+ * Created  : 2009-12-19
  * License  : Apache License 2.0 
  */
 package net.solosky.maplefetion.net.mina;
 
-import net.solosky.maplefetion.FetionException;
-import net.solosky.maplefetion.client.SystemException;
-import net.solosky.maplefetion.net.AbstractTransfer;
-import net.solosky.maplefetion.net.TransferException;
-import net.solosky.maplefetion.net.buffer.MinaBufferReader;
+import java.io.IOException;
 
-import org.apache.mina.core.buffer.IoBuffer;
+import net.solosky.maplefetion.net.AbstractTransfer;
+import net.solosky.maplefetion.sip.SIPNotify;
+import net.solosky.maplefetion.sip.SIPOutMessage;
+import net.solosky.maplefetion.sip.SIPResponse;
+
+import org.apache.log4j.Logger;
 import org.apache.mina.core.session.IoSession;
 
 /**
  *
- * Mina传输模式
- *
+ *	Mina传输对象
  *
  * @author solosky <solosky772@qq.com>
- *
  */
 public class MinaTransfer extends AbstractTransfer
-{
-
+{	
 	/**
-	 * IoSession
+	 * 会话对象，一个对象代表了一个连接
 	 */
 	private IoSession session;
 	
 	/**
-	 * 是否是用户主动关闭了连接
+	 * Logger
 	 */
-	private boolean isUserClosed;
+	private static Logger logger = Logger.getLogger(MinaTransfer.class);
 	
 	
 	/**
-	 * 以一个IoSession构建传输对象
-	 * @param session
+	 * 构造函数
+	 * @param session Connector建立连接的会话对象
 	 */
 	public MinaTransfer(IoSession session)
 	{
+		super();
 		this.session = session;
-		this.isUserClosed = false;
-	}
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.AbstractTransfer#sendBytes(byte[], int, int)
-	 */
-	@Override
-	protected synchronized void sendBytes(byte[] buff, int offset, int len)
-			throws TransferException
-	{
-		this.session.write(IoBuffer.wrap(buff, offset, len));
-	}
-	/**
-	 * @return the session
-	 */
-	public IoSession getSession()
-	{
-		return session;
+		this.session.setAttribute("TRANSFER", this);
 	}
 	
-	/**
-	 * 接受到数据了
-	 * @param tmpBuffer
-	 */
-	public void bufferReceived(IoBuffer tmpBuffer)
-	{
-		try {
-	        this.processIncoming(new MinaBufferReader(tmpBuffer));
-        } catch (FetionException e) {
-	       	this.raiseException(e);
-        }catch(Throwable t) {
-        	this.raiseException(new SystemException(t, new String(tmpBuffer.array())));
-        }
-	}
-	
-	/**
-	 * 有错误发生
-	 */
-	public void handleException(Throwable throwable)
-	{
-		this.raiseException(new TransferException(throwable));
-	}
-	
-	/**
-	 * 服务关闭了连接
-	 */
-	public void connectionClosed()
-	{
-		if(!this.isUserClosed)
-			this.raiseException(new TransferException("Server closed connection.."));
-	}
-	/* (non-Javadoc)
-	 * @see net.solosky.maplefetion.net.AbstractTransfer#stopTransfer()
-	 */
-	@Override
-	public void stopTransfer() throws TransferException
-	{
-		this.session.close(true);
-		this.isUserClosed = true;
-	}
+    @Override
+    public void sendSIPMessage(SIPOutMessage outMessage)
+            throws IOException
+    {
+    	 this.session.write(outMessage);
+    }
+
+    @Override
+    public void startTransfer() throws Exception
+    {
+    	logger.debug("MinaTransfer started:"+this.session);
+    }
+
+    @Override
+    public void stopTransfer() throws Exception
+    {
+    	this.session.close(false);
+    	logger.debug("MinaTransfer stoped:"+this.session);
+    }
+
+    /**
+     * 因为MinaTransfer是由IoHandler调用的，但recieved的两个方法都是保护的，外部能访问，所以这里需要使用两个适配器转发
+     * @param notify
+     * @throws IOException
+     */
+    public void minaNotifyReceived(SIPNotify notify) throws IOException
+    {
+	    super.notifyReceived(notify);
+    }
+
+    /**
+     * 转发至父类的方法
+     * @param response
+     * @throws IOException
+     */
+    public void minaResponseReceived(SIPResponse response) throws IOException
+    {
+	    super.responseReceived(response);
+    }
+
+    @Override
+    public String getName()
+    {
+    	String addr = this.session.getRemoteAddress().toString();
+	    return "MinaTransfer-"+addr.substring(1, addr.lastIndexOf(":"));
+    }
+    
+    
+    
+
 }

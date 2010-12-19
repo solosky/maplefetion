@@ -25,9 +25,7 @@
  */
 package net.solosky.maplefetion.util;
 
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-
+import org.apache.log4j.Logger;
 
 
 /**
@@ -55,11 +53,6 @@ public class ObjectWaiter<T>
 	private Object lock;
 	
 	/**
-	 * 是否结果已经到达，这个标志变量是为了解决提前通知的问题
-	 */
-	private boolean isObjectArrived;
-	
-	/**
 	 * 是否有人再等等
 	 */
 	private boolean isWaiting;
@@ -72,53 +65,28 @@ public class ObjectWaiter<T>
 		this.target = null;
 		this.exception = null;
 		this.isWaiting = false;
-		this.isObjectArrived = false;
 		this.lock  = new Object();
 	}
 	
 	/**
 	 * 等待对象
 	 * 如果结果没有返回，就在此等待
-	 * @param time 等待多久如果结果没有到来就返回
 	 * @return  等待结果对象
-	 * @throws Exception 如果超时或结果出现异常就抛出
 	 */
-	public T waitObject(long timeout) throws ExecutionException, TimeoutException, InterruptedException
+	public T waitObject()
 	{
 		synchronized (lock) {
-			
-			//判断是否有结果返回，如果有直接返回结果，因为这里可能存在提前通知的可能
-			if(this.isObjectArrived) {
-				return this.getObject();
-			}
-			
-			//没有结果返回，直接等待指定的时间，超时抛出异常，如果结果也有异常，就抛出异常，没有异常就返回结果
-			//TODO ..这里应该对结果异常和超时异常分开抛出
-			//重置一些变量，防止误用
 			this.isWaiting = true;
 			this.target   = null;
 			this.exception = null;
-			
-			//等待指定的时间，注意这里超时也抛出和结果异常同样的异常，没有区分
-	        lock.wait(timeout);
-	        
-	        //返回结果
-	        return this.getObject();
+	        try {
+	            lock.wait();
+            } catch (InterruptedException e) {
+	           Logger.getLogger(ObjectWaiter.class).warn("ActionWaiter Interrupted..");
+            }
+	        this.isWaiting = false;
+	        return this.target;
         }
-	}
-	
-	
-	/**
-	 * 等待结果，如果结果没有到来就一直等待
-	 * @return
-	 * @throws InterruptedException 
-	 * @throws TimeoutException 
-	 * @throws ExecutionException 
-	 * @throws Exception
-	 */
-	public T waitObject() throws ExecutionException, TimeoutException, InterruptedException
-	{
-		return this.waitObject(0);
 	}
 	
 	/**
@@ -128,7 +96,6 @@ public class ObjectWaiter<T>
 	public void objectArrive(T target)
 	{
 		synchronized (lock) {
-			this.isObjectArrived = true;
 	        this.target = target;
 	        lock.notifyAll();
         }
@@ -142,7 +109,6 @@ public class ObjectWaiter<T>
 	{
 		synchronized (lock) {
 			this.target = null;
-			this.isObjectArrived = true;
 	        this.exception = exception;
 	        lock.notifyAll();
         }
@@ -175,23 +141,4 @@ public class ObjectWaiter<T>
 	{
 		return this.exception;
 	}
-	
-	/**
-	 * 根据当前结果返回对象
-	 * 如果有异常就抛出异常，如果没有异常就返回结果对象
-	 * @throws ExecutionException 
-	 * @throws TimeoutException 
-	 * @throws Exception 
-	 */
-	public T getObject() throws ExecutionException, TimeoutException
-	{
-		if(this.exception!=null) {
-			throw new ExecutionException(this.exception);
-		}else if(this.target!=null) {
-			return this.target;
-		}else {
-			throw new TimeoutException();
-		}
-	}
-	
 }
